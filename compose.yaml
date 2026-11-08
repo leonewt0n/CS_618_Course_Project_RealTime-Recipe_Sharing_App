@@ -1,4 +1,3 @@
-version: '3.9'
 services:
   recipe-database:
     image: mongo
@@ -8,7 +7,7 @@ services:
     build: backend/
     environment:
       - PORT=3001
-      - DATABASE_URL=mongodb://host.docker.internal:27017/recipes
+      - DATABASE_URL=mongodb://recipe-database:27017/recipes
       - JWT_SECRET=replace-with-random-secret
     ports:
       - '3001:3001'
