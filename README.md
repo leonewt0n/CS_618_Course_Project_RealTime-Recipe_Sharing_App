@@ -2,11 +2,15 @@
 
 CS 618 course project. Milestone 1 delivers auth plus recipe CRUD on the MERN stack.
 
-## Features (Milestone 1)
+## Features
 
-- Sign up / log in with JWT
+- Sign up / log in with JWT, over GraphQL
 - Create, view, edit, and delete your own recipes
 - Each recipe has a title, ingredient list, and image URL
+- Logged-in users can like and unlike recipes
+- Every recipe shows its like count
+- Sort the list by popularity, or show popular recipes only
+- Top recipes are ranked with a MongoDB aggregation (`$group` + `$sum`)
 
 ## Requirements
 
@@ -22,7 +26,7 @@ npm install
 npm run dev
 ```
 
-API: `http://localhost:3001`
+GraphQL: `http://localhost:3001/graphql`
 
 ## Frontend
 
@@ -37,7 +41,7 @@ App: `http://localhost:5173` (Vite default)
 Ensure `.env` contains:
 
 ```
-VITE_BACKEND_URL=http://localhost:3001/api/v1
+VITE_BACKEND_URL=http://localhost:3001
 ```
 
 ## Docker Compose

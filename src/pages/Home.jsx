@@ -5,6 +5,7 @@ import { RecipeForm } from '../components/RecipeForm.jsx'
 import { RecipeList } from '../components/RecipeList.jsx'
 import { RecipeFilter } from '../components/RecipeFilter.jsx'
 import { RecipeSorting } from '../components/RecipeSorting.jsx'
+import { TopRecipes } from '../components/TopRecipes.jsx'
 import { getRecipes } from '../api/recipes.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { getUserInfo } from '../api/users.js'
@@ -15,16 +16,19 @@ export function Home() {
   const [author, setAuthor] = useState('')
   const [sortBy, setSortBy] = useState('createdAt')
   const [sortOrder, setSortOrder] = useState('descending')
+  const [popularOnly, setPopularOnly] = useState(false)
+  const userId = token ? jwtDecode(token).sub : null
 
   const recipesQuery = useQuery({
-    queryKey: ['recipes', { author, sortBy, sortOrder }],
-    queryFn: () => getRecipes({ author, sortBy, sortOrder }),
+    queryKey: ['recipes', { author, sortBy, sortOrder, popularOnly, userId }],
+    queryFn: () =>
+      getRecipes({ author, sortBy, sortOrder, popularOnly }, token),
   })
 
   const currentUsernameQuery = useQuery({
-    queryKey: ['users', token ? jwtDecode(token).sub : null],
-    queryFn: () => getUserInfo(jwtDecode(token).sub),
-    enabled: Boolean(token),
+    queryKey: ['users', userId],
+    queryFn: () => getUserInfo(userId),
+    enabled: Boolean(userId),
   })
 
   const recipes = recipesQuery.data ?? []
@@ -47,12 +51,20 @@ export function Home() {
       <div className='toolbar'>
         <RecipeFilter value={author} onChange={setAuthor} />
         <RecipeSorting
-          fields={['createdAt', 'updatedAt']}
+          fields={['createdAt', 'updatedAt', 'likeCount']}
           value={sortBy}
           onChange={setSortBy}
           orderValue={sortOrder}
           onOrderChange={setSortOrder}
         />
+        <label className='check-field'>
+          <input
+            type='checkbox'
+            checked={popularOnly}
+            onChange={(e) => setPopularOnly(e.target.checked)}
+          />
+          Popular only
+        </label>
         {token && currentUsernameQuery.data?.username ? (
           <button
             type='button'
@@ -68,6 +80,8 @@ export function Home() {
           </button>
         ) : null}
       </div>
+
+      <TopRecipes token={token || undefined} />
 
       {recipesQuery.isLoading ? (
         <div className='empty-state'>Loading recipes…</div>

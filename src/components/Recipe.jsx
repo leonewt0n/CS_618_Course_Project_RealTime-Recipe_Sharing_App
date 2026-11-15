@@ -1,29 +1,52 @@
 import { useState } from 'react'
 import PropTypes from 'prop-types'
+import { Link } from 'react-router-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { jwtDecode } from 'jwt-decode'
-import { deleteRecipe } from '../api/recipes.js'
+import { deleteRecipe, likeRecipe, unlikeRecipe } from '../api/recipes.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { User } from './User.jsx'
 import { RecipeForm } from './RecipeForm.jsx'
 
-export function Recipe({ _id, title, ingredients = [], imageUrl, author }) {
+export function Recipe({
+  id,
+  title,
+  ingredients = [],
+  imageUrl,
+  author,
+  likeCount = 0,
+  likedByMe = false,
+}) {
   const [token] = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const queryClient = useQueryClient()
 
   const currentUserId = token ? jwtDecode(token).sub : null
-  const isOwner = Boolean(currentUserId && author && String(author) === String(currentUserId))
+  const authorId = author?.id ?? author
+  const isOwner = Boolean(
+    currentUserId && authorId && String(authorId) === String(currentUserId),
+  )
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['recipes'] })
+    queryClient.invalidateQueries({ queryKey: ['topRecipes'] })
+  }
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteRecipe(token, _id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['recipes'] }),
+    mutationFn: () => deleteRecipe(token, id),
+    onSuccess: refresh,
+  })
+
+  const likeMutation = useMutation({
+    mutationFn: () =>
+      likedByMe ? unlikeRecipe(token, id) : likeRecipe(token, id),
+    onSuccess: refresh,
   })
 
   if (isEditing) {
     return (
       <RecipeForm
-        recipe={{ _id, title, ingredients, imageUrl }}
+        recipe={{ id, title, ingredients, imageUrl }}
         submitLabel='Save changes'
         onCancel={() => setIsEditing(false)}
       />
@@ -39,12 +62,39 @@ export function Recipe({ _id, title, ingredients = [], imageUrl, author }) {
         <h3>{title}</h3>
         {author ? (
           <div className='recipe-card__meta'>
-            by <User id={author} />
+            by <User id={authorId} username={author?.username} />
           </div>
+        ) : null}
+        <div className='like-row'>
+          <span className='like-count'>
+            {likeCount} {likeCount === 1 ? 'like' : 'likes'}
+          </span>
+          {token ? (
+            <button
+              type='button'
+              className={likedByMe ? 'liked' : 'secondary'}
+              aria-pressed={likedByMe}
+              disabled={likeMutation.isPending}
+              onClick={() => likeMutation.mutate()}
+            >
+              {likeMutation.isPending
+                ? 'Saving…'
+                : likedByMe
+                  ? 'Liked'
+                  : 'Like'}
+            </button>
+          ) : (
+            <Link className='btn secondary' to='/login'>
+              Log in to like
+            </Link>
+          )}
+        </div>
+        {likeMutation.isError ? (
+          <p className='form-error'>Could not update like.</p>
         ) : null}
         <ul className='ingredient-list'>
           {ingredients.map((item, index) => (
-            <li key={`${_id}-${index}`}>{item}</li>
+            <li key={`${id}-${index}`}>{item}</li>
           ))}
         </ul>
         {isOwner ? (
@@ -72,9 +122,14 @@ export function Recipe({ _id, title, ingredients = [], imageUrl, author }) {
 }
 
 Recipe.propTypes = {
-  _id: PropTypes.string.isRequired,
+  id: PropTypes.string.isRequired,
   title: PropTypes.string.isRequired,
   ingredients: PropTypes.arrayOf(PropTypes.string),
   imageUrl: PropTypes.string.isRequired,
-  author: PropTypes.string,
+  author: PropTypes.shape({
+    id: PropTypes.string,
+    username: PropTypes.string,
+  }),
+  likeCount: PropTypes.number,
+  likedByMe: PropTypes.bool,
 }

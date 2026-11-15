@@ -1,5 +1,11 @@
 import PropTypes from 'prop-types'
 
+const FIELD_LABELS = {
+  createdAt: 'Created',
+  updatedAt: 'Updated',
+  likeCount: 'Popularity',
+}
+
 export function RecipeSorting({
   fields = [],
   value,
@@ -7,6 +13,7 @@ export function RecipeSorting({
   orderValue,
   onOrderChange,
 }) {
+  const byPopularity = value === 'likeCount'
   return (
     <>
       <div className='field'>
@@ -18,7 +25,7 @@ export function RecipeSorting({
         >
           {fields.map((field) => (
             <option key={field} value={field}>
-              {field === 'createdAt' ? 'Created' : 'Updated'}
+              {FIELD_LABELS[field] ?? field}
             </option>
           ))}
         </select>
@@ -30,8 +37,12 @@ export function RecipeSorting({
           value={orderValue}
           onChange={(e) => onOrderChange(e.target.value)}
         >
-          <option value='descending'>Newest first</option>
-          <option value='ascending'>Oldest first</option>
+          <option value='descending'>
+            {byPopularity ? 'Most liked' : 'Newest first'}
+          </option>
+          <option value='ascending'>
+            {byPopularity ? 'Least liked' : 'Oldest first'}
+          </option>
         </select>
       </div>
     </>

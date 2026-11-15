@@ -24,17 +24,15 @@ npm start     # production
 npm test
 ```
 
-## API (Milestone 1)
+## API
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/api/v1/user/signup` | no | Create account |
-| POST | `/api/v1/user/login` | no | Get JWT |
-| GET | `/api/v1/users/:id` | no | Username lookup |
-| GET | `/api/v1/recipes` | no | List recipes (`author`, `sortBy`, `sortOrder`) |
-| GET | `/api/v1/recipes/:id` | no | Get one recipe |
-| POST | `/api/v1/recipes` | JWT | Create recipe |
-| PATCH | `/api/v1/recipes/:id` | JWT | Update own recipe |
-| DELETE | `/api/v1/recipes/:id` | JWT | Delete own recipe |
+Every operation is a GraphQL document posted to `POST /graphql`.
+Send `Authorization: Bearer <token>` for mutations that need a logged-in user.
 
-Recipe body: `{ title, ingredients: string[], imageUrl }`
+Queries: `recipes`, `recipe`, `topRecipes`, `user`, `me`.
+
+`recipes` arguments: `author`, `sortBy` (`CREATED_AT`, `UPDATED_AT`, `LIKE_COUNT`), `sortOrder` (`ASCENDING`, `DESCENDING`), `popularOnly`.
+
+`topRecipes` ranks recipes with a MongoDB aggregation (`$group` on likes, `$sum` the count).
+
+Mutations: `signup`, `login`, `createRecipe`, `updateRecipe`, `deleteRecipe`, `likeRecipe`, `unlikeRecipe`.

@@ -33,7 +33,7 @@ export function RecipeForm({
         imageUrl: imageUrl.trim(),
       }
       return isEditing
-        ? updateRecipe(token, recipe._id, payload)
+        ? updateRecipe(token, recipe.id, payload)
         : createRecipe(token, payload)
     },
     onSuccess: () => {
@@ -169,7 +169,7 @@ export function RecipeForm({
 
 RecipeForm.propTypes = {
   recipe: PropTypes.shape({
-    _id: PropTypes.string.isRequired,
+    id: PropTypes.string.isRequired,
     title: PropTypes.string.isRequired,
     ingredients: PropTypes.arrayOf(PropTypes.string).isRequired,
     imageUrl: PropTypes.string.isRequired,

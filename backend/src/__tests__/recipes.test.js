@@ -1,20 +1,29 @@
 import mongoose from 'mongoose'
+import { graphql } from 'graphql'
 import { describe, expect, test, beforeEach, beforeAll } from '@jest/globals'
 import {
   createRecipe,
   listAllRecipes,
   listRecipesByAuthor,
   getRecipeById,
+  getRecipeView,
+  getTopRecipes,
   updateRecipe,
   deleteRecipe,
+  likeRecipe,
+  unlikeRecipe,
 } from '../services/recipes.js'
 import { Recipe } from '../db/models/recipe.js'
+import { Like } from '../db/models/like.js'
 import { createUser } from '../services/users.js'
+import { schema } from '../graphql/schema.js'
+import { readUserId } from '../middleware/jwt.js'
 
 let testUser = null
 let sampleRecipes = []
 
 beforeAll(async () => {
+  process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret'
   testUser = await createUser({ username: 'chef', password: 'hunter2' })
   sampleRecipes = [
     {
@@ -81,6 +90,7 @@ describe('creating recipes', () => {
 let createdSampleRecipes = []
 
 beforeEach(async () => {
+  await Like.deleteMany({})
   await Recipe.deleteMany({})
   createdSampleRecipes = []
   for (const recipe of sampleRecipes) {
@@ -173,22 +183,135 @@ describe('updating recipes', () => {
   })
 })
 
+describe('likes and popularity', () => {
+  let fan = null
+
+  beforeAll(async () => {
+    fan = await createUser({ username: 'fan', password: 'hunter2' })
+  })
+
+  test('a user can like a recipe once', async () => {
+    const id = createdSampleRecipes[0]._id
+    await likeRecipe(testUser._id, id)
+    const again = await likeRecipe(testUser._id, id)
+    expect(again.likeCount).toBe(1)
+    expect(again.likedByMe).toBe(true)
+
+    const otherView = await getRecipeView(id, fan._id)
+    expect(otherView.likeCount).toBe(1)
+    expect(otherView.likedByMe).toBe(false)
+  })
+
+  test('unlike removes the like', async () => {
+    const id = createdSampleRecipes[0]._id
+    await likeRecipe(testUser._id, id)
+    const after = await unlikeRecipe(testUser._id, id)
+    expect(after.likeCount).toBe(0)
+    expect(after.likedByMe).toBe(false)
+  })
+
+  test('sorts and filters recipes by like count', async () => {
+    await likeRecipe(testUser._id, createdSampleRecipes[0]._id)
+    await likeRecipe(fan._id, createdSampleRecipes[0]._id)
+    await likeRecipe(fan._id, createdSampleRecipes[1]._id)
+
+    const byPopularity = await listAllRecipes({
+      sortBy: 'likeCount',
+      sortOrder: 'descending',
+    })
+    expect(byPopularity.map((recipe) => recipe.likeCount)).toEqual([2, 1, 0])
+
+    const popularOnly = await listAllRecipes({ minLikes: 1 })
+    expect(popularOnly).toHaveLength(2)
+    expect(popularOnly.every((recipe) => recipe.likeCount >= 1)).toBe(true)
+  })
+
+  test('aggregates top recipes with $group', async () => {
+    await likeRecipe(testUser._id, createdSampleRecipes[0]._id)
+    await likeRecipe(fan._id, createdSampleRecipes[0]._id)
+    await likeRecipe(fan._id, createdSampleRecipes[1]._id)
+
+    const top = await getTopRecipes(5, fan._id)
+    expect(top.map((recipe) => recipe.title)).toEqual([
+      'Tomato Basil Pasta',
+      'Avocado Toast',
+    ])
+    expect(top.map((recipe) => recipe.likeCount)).toEqual([2, 1])
+    expect(top[0].likedByMe).toBe(true)
+    expect(top[1].likedByMe).toBe(true)
+  })
+
+  test('deleting a recipe drops its likes from the ranking', async () => {
+    await likeRecipe(testUser._id, createdSampleRecipes[0]._id)
+    await deleteRecipe(testUser._id, createdSampleRecipes[0]._id)
+    const top = await getTopRecipes(5)
+    expect(top.map((recipe) => recipe.title)).toEqual([])
+  })
+})
+
+describe('graphql api', () => {
+  test('login returns a token that identifies the user', async () => {
+    const result = await graphql({
+      schema,
+      source: `mutation {
+        login(username: "chef", password: "hunter2") { token }
+      }`,
+      contextValue: {},
+    })
+    expect(result.errors).toBeUndefined()
+    const userId = readUserId({
+      headers: { authorization: `Bearer ${result.data.login.token}` },
+    })
+    expect(userId).toBe(String(testUser._id))
+  })
+
+  test('logged-out like is rejected and a logged-in like updates the count', async () => {
+    const id = String(createdSampleRecipes[0]._id)
+    const source = `mutation Like($id: ID!) {
+      likeRecipe(id: $id) { id likeCount likedByMe }
+    }`
+    const rejected = await graphql({
+      schema,
+      source,
+      variableValues: { id },
+      contextValue: {},
+    })
+    expect(rejected.errors?.[0].message).toMatch(/logged in/)
+
+    const liked = await graphql({
+      schema,
+      source,
+      variableValues: { id },
+      contextValue: { userId: String(testUser._id) },
+    })
+    expect(liked.errors).toBeUndefined()
+    expect(liked.data.likeRecipe).toEqual({
+      id,
+      likeCount: 1,
+      likedByMe: true,
+    })
+
+    const top = await graphql({
+      schema,
+      source: `query { topRecipes(limit: 3) { title likeCount } }`,
+      contextValue: {},
+    })
+    expect(top.data.topRecipes).toEqual([
+      { title: 'Tomato Basil Pasta', likeCount: 1 },
+    ])
+  })
+})
+
 describe('deleting recipes', () => {
   test('should remove the recipe from the database', async () => {
-    const result = await deleteRecipe(
-      testUser._id,
-      createdSampleRecipes[0]._id,
-    )
+    const result = await deleteRecipe(testUser._id, createdSampleRecipes[0]._id)
     expect(result.deletedCount).toEqual(1)
     const deletedRecipe = await Recipe.findById(createdSampleRecipes[0]._id)
     expect(deletedRecipe).toEqual(null)
   })
 
   test('should fail if the id does not exist', async () => {
-    const result = await deleteRecipe(
-      testUser._id,
-      '000000000000000000000000',
-    )
+    const result = await deleteRecipe(testUser._id, '000000000000000000000000')
     expect(result.deletedCount).toEqual(0)
   })
 })

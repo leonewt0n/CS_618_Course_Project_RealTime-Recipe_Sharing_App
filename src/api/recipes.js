@@ -1,51 +1,135 @@
-const API_BASE = import.meta.env.VITE_BACKEND_URL
+import { graphqlRequest } from './graphql.js'
 
-export const getRecipes = async (queryParams) => {
-  const res = await fetch(
-    `${API_BASE}/recipes?` + new URLSearchParams(queryParams),
-  )
-  if (!res.ok) throw new Error('failed to load recipes')
-  return await res.json()
+const RECIPE_FIELDS = `
+  id
+  title
+  ingredients
+  imageUrl
+  likeCount
+  likedByMe
+  author { id username }
+`
+
+const SORT_FIELD = {
+  createdAt: 'CREATED_AT',
+  updatedAt: 'UPDATED_AT',
+  likeCount: 'LIKE_COUNT',
 }
 
-export const getRecipe = async (id) => {
-  const res = await fetch(`${API_BASE}/recipes/${id}`)
-  if (!res.ok) throw new Error('failed to load recipe')
-  return await res.json()
+const SORT_ORDER = {
+  ascending: 'ASCENDING',
+  descending: 'DESCENDING',
+}
+
+export const getRecipes = async (
+  { author, sortBy, sortOrder, popularOnly } = {},
+  token,
+) => {
+  const data = await graphqlRequest(
+    `query Recipes(
+      $author: String
+      $sortBy: RecipeSortField
+      $sortOrder: SortOrder
+      $popularOnly: Boolean
+    ) {
+      recipes(
+        author: $author
+        sortBy: $sortBy
+        sortOrder: $sortOrder
+        popularOnly: $popularOnly
+      ) { ${RECIPE_FIELDS} }
+    }`,
+    {
+      token,
+      variables: {
+        author: author || null,
+        sortBy: SORT_FIELD[sortBy] ?? 'CREATED_AT',
+        sortOrder: SORT_ORDER[sortOrder] ?? 'DESCENDING',
+        popularOnly: Boolean(popularOnly),
+      },
+    },
+  )
+  return data.recipes
+}
+
+export const getTopRecipes = async (limit = 5, token) => {
+  const data = await graphqlRequest(
+    `query TopRecipes($limit: Int) {
+      topRecipes(limit: $limit) { ${RECIPE_FIELDS} }
+    }`,
+    { token, variables: { limit } },
+  )
+  return data.topRecipes
+}
+
+export const getRecipe = async (id, token) => {
+  const data = await graphqlRequest(
+    `query Recipe($id: ID!) { recipe(id: $id) { ${RECIPE_FIELDS} } }`,
+    { token, variables: { id } },
+  )
+  if (!data.recipe) throw new Error('failed to load recipe')
+  return data.recipe
 }
 
 export const createRecipe = async (token, recipe) => {
-  const res = await fetch(`${API_BASE}/recipes`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(recipe),
-  })
-  if (!res.ok) throw new Error('failed to create recipe')
-  return await res.json()
+  const data = await graphqlRequest(
+    `mutation CreateRecipe(
+      $title: String!
+      $ingredients: [String!]!
+      $imageUrl: String!
+    ) {
+      createRecipe(title: $title, ingredients: $ingredients, imageUrl: $imageUrl) {
+        ${RECIPE_FIELDS}
+      }
+    }`,
+    { token, variables: recipe },
+  )
+  return data.createRecipe
 }
 
 export const updateRecipe = async (token, id, recipe) => {
-  const res = await fetch(`${API_BASE}/recipes/${id}`, {
-    method: 'PATCH',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(recipe),
-  })
-  if (!res.ok) throw new Error('failed to update recipe')
-  return await res.json()
+  const data = await graphqlRequest(
+    `mutation UpdateRecipe(
+      $id: ID!
+      $title: String
+      $ingredients: [String!]
+      $imageUrl: String
+    ) {
+      updateRecipe(
+        id: $id
+        title: $title
+        ingredients: $ingredients
+        imageUrl: $imageUrl
+      ) { ${RECIPE_FIELDS} }
+    }`,
+    { token, variables: { id, ...recipe } },
+  )
+  return data.updateRecipe
 }
 
 export const deleteRecipe = async (token, id) => {
-  const res = await fetch(`${API_BASE}/recipes/${id}`, {
-    method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  })
-  if (!res.ok) throw new Error('failed to delete recipe')
+  await graphqlRequest(
+    `mutation DeleteRecipe($id: ID!) { deleteRecipe(id: $id) }`,
+    { token, variables: { id } },
+  )
+}
+
+export const likeRecipe = async (token, id) => {
+  const data = await graphqlRequest(
+    `mutation LikeRecipe($id: ID!) {
+      likeRecipe(id: $id) { id likeCount likedByMe }
+    }`,
+    { token, variables: { id } },
+  )
+  return data.likeRecipe
+}
+
+export const unlikeRecipe = async (token, id) => {
+  const data = await graphqlRequest(
+    `mutation UnlikeRecipe($id: ID!) {
+      unlikeRecipe(id: $id) { id likeCount likedByMe }
+    }`,
+    { token, variables: { id } },
+  )
+  return data.unlikeRecipe
 }
