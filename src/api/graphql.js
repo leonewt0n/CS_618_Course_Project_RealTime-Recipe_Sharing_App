@@ -1,8 +1,13 @@
-function graphqlEndpoint() {
+export function backendOrigin() {
   const configured = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'
-  if (configured.endsWith('/graphql')) return configured
-  const root = configured.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '')
-  return `${root}/graphql`
+  return configured
+    .replace(/\/graphql\/?$/, '')
+    .replace(/\/api\/v1\/?$/, '')
+    .replace(/\/$/, '')
+}
+
+function graphqlEndpoint() {
+  return `${backendOrigin()}/graphql`
 }
 
 export async function graphqlRequest(query, { variables, token } = {}) {

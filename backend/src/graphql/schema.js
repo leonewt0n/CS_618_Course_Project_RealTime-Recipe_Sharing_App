@@ -23,6 +23,7 @@ import {
   unlikeRecipe,
   updateRecipe,
 } from '../services/recipes.js'
+import { emitRecipeCreated } from '../realtime.js'
 
 function badInput(message) {
   return new GraphQLError(message, { extensions: { code: 'BAD_USER_INPUT' } })
@@ -231,7 +232,9 @@ const MutationType = new GraphQLObjectType({
         const userId = requireUser(context)
         try {
           const created = await createRecipe(userId, args)
-          return await saveAndPresent(userId, created._id)
+          const recipe = await saveAndPresent(userId, created._id)
+          emitRecipeCreated(recipe)
+          return recipe
         } catch (err) {
           if (err instanceof GraphQLError) throw err
           if (err.name === 'ValidationError') throw badInput(err.message)
